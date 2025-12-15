@@ -9,54 +9,138 @@ import (
 	"context"
 	"fmt"
 
+	orderpb "github.com/mrezayusufy/shop-api/pkg/proto/order"
+	productpb "github.com/mrezayusufy/shop-api/pkg/proto/product"
+	userpb "github.com/mrezayusufy/shop-api/pkg/proto/user"
+	"github.com/mrezayusufy/shop-api/services/gateway"
 	"github.com/mrezayusufy/shop-api/services/gateway/graph/model"
 )
 
 // CreateUser is the resolver for the createUser field.
 func (r *mutationResolver) CreateUser(ctx context.Context, name string, email string) (*model.User, error) {
-	panic(fmt.Errorf("not implemented: CreateUser - createUser"))
+	return nil, fmt.Errorf("not implemented: CreateUser - createUser")
 }
 
 // CreateProduct is the resolver for the createProduct field.
 func (r *mutationResolver) CreateProduct(ctx context.Context, name string, description string, price float64, stock int) (*model.Product, error) {
-	panic(fmt.Errorf("not implemented: CreateProduct - createProduct"))
+	res, err := r.ProductClient.CreateProduct(ctx, &productpb.CreateProductRequest{
+		Name:        name,
+		Description: description,
+		Price:       price,
+		Stock:       int32(stock),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return toProductModel(res.GetProduct()), nil
 }
 
 // CreateOrder is the resolver for the createOrder field.
 func (r *mutationResolver) CreateOrder(ctx context.Context, userID string, items []*model.OrderItemInput) (*model.Order, error) {
-	panic(fmt.Errorf("not implemented: CreateOrder - createOrder"))
+	return nil, fmt.Errorf("not implemented: CreateOrder - createOrder")
 }
 
 // User is the resolver for the user field.
 func (r *queryResolver) User(ctx context.Context, id string) (*model.User, error) {
-	panic(fmt.Errorf("not implemented: User - user"))
+	res, err := r.UserClient.GetUser(ctx, &userpb.GetUserRequest{Id: id})
+	if err != nil {
+		return nil, err
+	}
+	if res.GetUser() == nil {
+		return nil, nil
+	}
+	return toUserModel(res.GetUser()), nil
 }
 
 // Product is the resolver for the product field.
 func (r *queryResolver) Product(ctx context.Context, id string) (*model.Product, error) {
-	panic(fmt.Errorf("not implemented: Product - product"))
+	res, err := r.ProductClient.GetProduct(ctx, &productpb.GetProductRequest{Id: id})
+	if err != nil {
+		return nil, err
+	}
+	return toProductModel(res.GetProduct()), nil
 }
 
 // Products is the resolver for the products field.
 func (r *queryResolver) Products(ctx context.Context) ([]*model.Product, error) {
-	panic(fmt.Errorf("not implemented: Products - products"))
+	res, err := r.ProductClient.ListProducts(ctx, &productpb.ListProductsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	products := make([]*model.Product, 0, len(res.GetProducts()))
+	for _, p := range res.GetProducts() {
+		products = append(products, toProductModel(p.GetProduct()))
+	}
+	return products, nil
 }
 
 // Order is the resolver for the order field.
 func (r *queryResolver) Order(ctx context.Context, id string) (*model.Order, error) {
-	panic(fmt.Errorf("not implemented: Order - order"))
+	res, err := r.OrderClient.GetOrder(ctx, &orderpb.GetOrderRequest{Id: id})
+	if err != nil {
+		return nil, err
+	}
+	order := res.GetOrder()
+	if order == nil {
+		return nil, nil
+	}
+
+	modelOrder := &model.Order{
+		ID:     order.GetId(),
+		UserID: order.GetUserId(),
+		Total:  order.GetTotalAmount(),
+		Items:  make([]*model.OrderItem, 0, len(order.GetItems())),
+		Status: "paid",
+	}
+
+	for _, item := range order.GetItems() {
+		orderItem := &model.OrderItem{ProductID: item.GetProductId(), Quantity: int(item.GetQuantity())}
+		if product, err := r.ProductClient.GetProduct(ctx, &productpb.GetProductRequest{Id: item.GetProductId()}); err == nil {
+			orderItem.Product = toProductModel(product.GetProduct())
+			if orderItem.Product != nil {
+				orderItem.Price = orderItem.Product.Price
+			}
+		}
+		modelOrder.Items = append(modelOrder.Items, orderItem)
+	}
+
+	if userRes, err := r.UserClient.GetUser(ctx, &userpb.GetUserRequest{Id: order.GetUserId()}); err == nil {
+		modelOrder.User = toUserModel(userRes.GetUser())
+	}
+
+	return modelOrder, nil
 }
 
 // UserOrders is the resolver for the userOrders field.
 func (r *queryResolver) UserOrders(ctx context.Context, userID string) ([]*model.Order, error) {
-	panic(fmt.Errorf("not implemented: UserOrders - userOrders"))
+	return []*model.Order{}, nil
+}
+
+func toUserModel(user *userpb.User) *model.User {
+	if user == nil {
+		return nil
+	}
+	return &model.User{ID: user.GetId(), Name: user.GetUsername(), Email: user.GetEmail()}
+}
+
+func toProductModel(product *productpb.Product) *model.Product {
+	if product == nil {
+		return nil
+	}
+	return &model.Product{
+		ID:          product.GetId(),
+		Name:        product.GetName(),
+		Description: product.GetDescription(),
+		Price:       product.GetPrice(),
+		Stock:       int(product.GetStock()),
+	}
 }
 
 // Mutation returns MutationResolver implementation.
-func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
+func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r.Resolver} }
 
 // Query returns QueryResolver implementation.
-func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
+func (r *Resolver) Query() QueryResolver { return &queryResolver{r.Resolver} }
 
-type mutationResolver struct{ *Resolver }
-type queryResolver struct{ *Resolver }
+type mutationResolver struct{ *gateway.Resolver }
+type queryResolver struct{ *gateway.Resolver }

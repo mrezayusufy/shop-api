@@ -1,81 +1,51 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/playground"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	pb "github.com/mrezayusufy/shop-api/pkg/proto/user"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
-	orderPb "github.com/mrezayusufy/shop-api/pkg/proto/order"
-	productPb "github.com/mrezayusufy/shop-api/pkg/proto/product"
-	userPb "github.com/mrezayusufy/shop-api/pkg/proto/user"
-	"github.com/mrezayusufy/shop-api/services/gateway/graph"
-	"github.com/mrezayusufy/shop-api/services/gateway/graph/generated"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// Config holds the gRPC client connections
-type Config struct {
-	UserClient    userPb.UserServiceClient
-	OrderClient   orderPb.OrderServiceClient
-	ProductClient productPb.ProductServiceClient
+const port = ":50051"
+
+type userServer struct {
+	pb.UnimplementedUserServiceServer
+	users map[string]*pb.User
+}
+
+func newUserServer() *userServer {
+	return &userServer{
+		users: map[string]*pb.User{
+			"user-1": {Id: "user-1", Username: "alice", Email: "alice@example.com"},
+			"user-2": {Id: "user-2", Username: "bob", Email: "bob@example.com"},
+		},
+	}
+}
+
+func (s *userServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
+	user, ok := s.users[req.GetId()]
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, "user %s not found", req.GetId())
+	}
+	return &pb.GetUserResponse{User: user}, nil
 }
 
 func main() {
-	// 1. Initialize gRPC Clients
-	cfg, err := initClients()
+	lis, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatalf("could not initialize gRPC clients: %v", err)
+		log.Fatalf("failed to listen: %v", err)
 	}
 
-	// 2. Initialize GraphQL Server
-	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{
-		Resolvers: &graph.Resolver{Config: cfg},
-	}))
+	srv := grpc.NewServer()
+	pb.RegisterUserServiceServer(srv, newUserServer())
 
-	// 3. Initialize Fiber App
-	app := fiber.New()
-
-	// 4. Setup GraphQL Endpoint
-	app.Post("/query", adaptor.HTTPHandler(srv))
-
-	// 5. Setup GraphQL Playground (for development)
-	app.Get("/", adaptor.HTTPHandler(playground.Handler("GraphQL Playground", "/query")))
-
-	log.Printf("connect to http://localhost:4000/ for GraphQL playground")
-	log.Fatal(app.Listen(":4000"))
-}
-
-func initClients() (*Config, error) {
-	// Set up a connection to the gRPC servers.
-	// In a real-world scenario, use service discovery (e.g., Consul, Kubernetes)
-	// and secure connections (TLS).
-
-	// User Service
-	userConn, err := grpc.Dial("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
+	log.Printf("User Service listening at %s", port)
+	if err := srv.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
 	}
-	// defer userConn.Close() // In a real app, manage connection lifecycle properly
-
-	// Order Service
-	orderConn, err := grpc.Dial("localhost:50053", grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
-	}
-
-	// Product Service
-	productConn, err := grpc.Dial("localhost:50052", grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
-	}
-
-	return &Config{
-		UserClient:    userPb.NewUserServiceClient(userConn),
-		OrderClient:   orderPb.NewOrderServiceClient(orderConn),
-		ProductClient: productPb.NewProductServiceClient(productConn),
-	}, nil
 }

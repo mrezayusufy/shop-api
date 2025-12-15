@@ -1,9 +1,9 @@
-module github.com/mrezayusufy/services/user
+module github.com/mrezayusufy/shop-api/services/user
 
 go 1.25.4
 
 require (
-	github.com/mrezayusufy/shop-api v0.0.0-20251214183551-8a4e6c7c752c
+	github.com/mrezayusufy/shop-api v0.0.0
 	google.golang.org/grpc v1.77.0
 )
 
@@ -14,3 +14,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251022142026-3a174f9686a8 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/mrezayusufy/shop-api => ../../
