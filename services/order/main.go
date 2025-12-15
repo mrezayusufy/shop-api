@@ -6,40 +6,44 @@ import (
 	"net"
 
 	pb "github.com/mrezayusufy/shop-api/pkg/proto/order"
-
 	"google.golang.org/grpc"
 )
 
-const (
-	port = ":50053"
-)
+const port = ":50053"
 
-// server is used to implement ecommerce.OrderServiceServer.
-type server struct {
+type orderServer struct {
 	pb.UnimplementedOrderServiceServer
+	orders map[string]*pb.Order
 }
 
-// GetOrder implements ecommerce.OrderServiceServer
-func (s *server) GetOrder(ctx context.Context, in *pb.GetOrderRequest) (*pb.OrderResponse, error) {
-	log.Printf("Received: GetOrder request for ID: %s", in.GetId())
-	// Mock data for demonstration
-	order := &pb.OrderResponse{
-		Id:     in.GetId(),
-		UserId: "user-123",
-		Items: []*pb.OrderItem{
-			{ProductId: "prod-1", Quantity: 2},
-			{ProductId: "prod-2", Quantity: 1},
+func newOrderServer() *orderServer {
+	return &orderServer{
+		orders: map[string]*pb.Order{
+			"order-1": {
+				Id:     "order-1",
+				UserId: "user-1",
+				Items: []*pb.OrderItem{
+					{ProductId: "product-1", Quantity: 2},
+					{ProductId: "product-2", Quantity: 1},
+				},
+				TotalAmount: 59.97,
+			},
+			"order-2": {
+				Id:          "order-2",
+				UserId:      "user-2",
+				Items:       []*pb.OrderItem{{ProductId: "product-3", Quantity: 3}},
+				TotalAmount: 29.97,
+			},
 		},
-		Total: 59.97,
-		Status: "paid",
 	}
-	return &pb.OrderResponse{
-		Id: order.Id,
-		UserId: order.UserId,
-		Items: order.Items,
-		Total: order.Total,
-		Status: order.Status,
-	}, nil
+}
+
+func (s *orderServer) GetOrder(ctx context.Context, req *pb.GetOrderRequest) (*pb.GetOrderResponse, error) {
+	order, ok := s.orders[req.GetId()]
+	if !ok {
+		return &pb.GetOrderResponse{}, nil
+	}
+	return &pb.GetOrderResponse{Order: order}, nil
 }
 
 func main() {
@@ -47,10 +51,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	s := grpc.NewServer()
-	pb.RegisterOrderServiceServer(s, &server{})
-	log.Printf("Order Service listening at %v", lis.Addr())
-	if err := s.Serve(lis); err != nil {
+
+	srv := grpc.NewServer()
+	pb.RegisterOrderServiceServer(srv, newOrderServer())
+
+	log.Printf("Order Service listening at %s", port)
+	if err := srv.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
