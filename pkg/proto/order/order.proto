@@ -4,40 +4,26 @@ package order;
 
 option go_package = "github.com/mrezayusufy/shop-api/pkg/proto/order";
 
-service OrderService {
-  rpc GetOrder(GetOrderRequest) returns (OrderResponse);
-  rpc CreateOrder(CreateOrderRequest) returns (OrderResponse);
-  rpc GetUserOrders(GetUserOrdersRequest) returns (GetUserOrdersResponse);
+message OrderItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message Order {
+  string id = 1;
+  string user_id = 2;
+  repeated OrderItem items = 3;
+  double total_amount = 4;
 }
 
 message GetOrderRequest {
   string id = 1;
 }
 
-message OrderItem {
-  string product_id = 1;
-  int32 quantity = 2;
-  double price = 3;
+message GetOrderResponse {
+  Order order = 1;
 }
 
-message CreateOrderRequest {
-  string user_id = 1;
-  repeated OrderItem items = 2;
-}
-
-message GetUserOrdersRequest {
-  string user_id = 1;
-}
-
-message OrderResponse {
-  string id = 1;
-  string user_id = 2;
-  repeated OrderItem items = 3;
-  double total = 4;
-  string status = 5;
-  string created_at = 6;
-}
-
-message GetUserOrdersResponse {
-  repeated OrderResponse orders = 1;
+service OrderService {
+  rpc GetOrder (GetOrderRequest) returns (GetOrderResponse);
 }

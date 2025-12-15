@@ -1,0 +1,42 @@
+# GraphQL Schema Definition
+
+# Types matching gRPC models
+type User {
+  id: ID!
+  username: String!
+  email: String!
+}
+
+type Product {
+  id: ID!
+  name: String!
+  description: String
+  price: Float!
+}
+
+type OrderItem {
+  productID: ID!
+  quantity: Int!
+}
+
+type Order {
+  id: ID!
+  userID: ID!
+  items: [OrderItem!]!
+  totalAmount: Float!
+  # Example of a field that resolves to another service
+  user: User!
+}
+
+# Root Query
+type Query {
+  user(id: ID!): User
+  product(id: ID!): Product
+  order(id: ID!): Order
+}
+
+# Root Mutation (Placeholder)
+type Mutation {
+  # Example: createUser(input: NewUserInput!): User!
+  _empty: String
+}

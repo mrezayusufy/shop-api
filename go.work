@@ -1,1 +1,7 @@
 go 1.25.4
+use (
+  ./services/user
+  ./services/order
+  ./services/product
+  ./services/gateway
+)

@@ -1,65 +1,81 @@
-package user
+package main
 
 import (
-    "context"
-    "fmt"
-    "sync"
+	"log"
 
-    pb "github.com/mrezayusufy/shop-api/pkg/proto/user"
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	orderPb "github.com/mrezayusufy/shop-api/pkg/proto/order"
+	productPb "github.com/mrezayusufy/shop-api/pkg/proto/product"
+	userPb "github.com/mrezayusufy/shop-api/pkg/proto/user"
+	"github.com/mrezayusufy/shop-api/services/gateway/graph"
+	"github.com/mrezayusufy/shop-api/services/gateway/graph/generated"
 )
 
-type Service struct {
-    pb.UnimplementedUserServiceServer
-    users map[string]*pb.UserResponse
-    mu    sync.RWMutex
+// Config holds the gRPC client connections
+type Config struct {
+	UserClient    userPb.UserServiceClient
+	OrderClient   orderPb.OrderServiceClient
+	ProductClient productPb.ProductServiceClient
 }
 
-func NewService() *Service {
-    svc := &Service{
-        users: make(map[string]*pb.UserResponse),
-    }
-    // Seed data
-    svc.users["user_1"] = &pb.UserResponse{
-        Id:    "user_1",
-        Name:  "John Doe",
-        Email: "john@example.com",
-    }
-    return svc
+func main() {
+	// 1. Initialize gRPC Clients
+	cfg, err := initClients()
+	if err != nil {
+		log.Fatalf("could not initialize gRPC clients: %v", err)
+	}
+
+	// 2. Initialize GraphQL Server
+	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{
+		Resolvers: &graph.Resolver{Config: cfg},
+	}))
+
+	// 3. Initialize Fiber App
+	app := fiber.New()
+
+	// 4. Setup GraphQL Endpoint
+	app.Post("/query", adaptor.HTTPHandler(srv))
+
+	// 5. Setup GraphQL Playground (for development)
+	app.Get("/", adaptor.HTTPHandler(playground.Handler("GraphQL Playground", "/query")))
+
+	log.Printf("connect to http://localhost:4000/ for GraphQL playground")
+	log.Fatal(app.Listen(":4000"))
 }
 
-func (s *Service) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.UserResponse, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
+func initClients() (*Config, error) {
+	// Set up a connection to the gRPC servers.
+	// In a real-world scenario, use service discovery (e.g., Consul, Kubernetes)
+	// and secure connections (TLS).
 
-    if user, exists := s.users[req.Id]; exists {
-        return user, nil
-    }
-    return nil, fmt.Errorf("user not found")
-}
+	// User Service
+	userConn, err := grpc.Dial("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	// defer userConn.Close() // In a real app, manage connection lifecycle properly
 
-func (s *Service) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.UserResponse, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
+	// Order Service
+	orderConn, err := grpc.Dial("localhost:50053", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
 
-    id := fmt.Sprintf("user_%d", len(s.users)+1)
-    user := &pb.UserResponse{
-        Id:    id,
-        Name:  req.Name,
-        Email: req.Email,
-    }
-    s.users[id] = user
-    return user, nil
-}
+	// Product Service
+	productConn, err := grpc.Dial("localhost:50052", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
 
-func (s *Service) GetUsers(ctx context.Context, req *pb.GetUsersRequest) (*pb.GetUsersResponse, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-
-    var users []*pb.UserResponse
-    for _, id := range req.Ids {
-        if user, exists := s.users[id]; exists {
-            users = append(users, user)
-        }
-    }
-    return &pb.GetUsersResponse{Users: users}, nil
+	return &Config{
+		UserClient:    userPb.NewUserServiceClient(userConn),
+		OrderClient:   orderPb.NewOrderServiceClient(orderConn),
+		ProductClient: productPb.NewProductServiceClient(productConn),
+	}, nil
 }

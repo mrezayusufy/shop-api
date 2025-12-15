@@ -2,33 +2,22 @@ syntax = "proto3";
 
 package user;
 
-option go_package = "github.com/mrezayusufy/shop-api/pkg/proto/user";
+option go_package = "go-microservice-monorepo/pkg/proto/user";
 
-service UserService {
-  rpc GetUser(GetUserRequest) returns (UserResponse);
-  rpc CreateUser(CreateUserRequest) returns (UserResponse);
-  rpc GetUsers(GetUsersRequest) returns (GetUsersResponse);
+message User {
+  string id = 1;
+  string username = 2;
+  string email = 3;
 }
 
 message GetUserRequest {
   string id = 1;
 }
 
-message CreateUserRequest {
-  string name = 1;
-  string email = 2;
+message GetUserResponse {
+  User user = 1;
 }
 
-message GetUsersRequest {
-  repeated string ids = 1;
-}
-
-message UserResponse {
-  string id = 1;
-  string name = 2;
-  string email = 3;
-}
-
-message GetUsersResponse {
-  repeated UserResponse users = 1;
+service UserService {
+  rpc GetUser (GetUserRequest) returns (GetUserResponse);
 }

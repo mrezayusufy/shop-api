@@ -1,90 +1,53 @@
-package product
+package main
 
 import (
-    "context"
-    "fmt"
-    "sync"
+	"context"
+	"log"
+	"net"
 
-    pb "github.com/mrezayusufy/shop-api/pkg/proto/product"
+	pb "github.com/mrezayusufy/shop-api/pkg/proto/product"
+
+	"google.golang.org/grpc"
 )
 
-type Service struct {
-    pb.UnimplementedProductServiceServer
-    products map[string]*pb.ProductResponse
-    mu       sync.RWMutex
+const (
+	port = ":50052"
+)
+
+// server is used to implement ecommerce.ProductServiceServer.
+type server struct {
+	pb.UnimplementedProductServiceServer
 }
 
-func NewService() *Service {
-    svc := &Service{
-        products: make(map[string]*pb.ProductResponse),
-    }
-    // Seed data
-    svc.products["prod_1"] = &pb.ProductResponse{
-        Id:          "prod_1",
-        Name:        "Laptop",
-        Description: "High-performance laptop",
-        Price:       999.99,
-        Stock:       10,
-    }
-    svc.products["prod_2"] = &pb.ProductResponse{
-        Id:          "prod_2",
-        Name:        "Mouse",
-        Description: "Wireless mouse",
-        Price:       29.99,
-        Stock:       50,
-    }
-    return svc
+// GetProduct implements ecommerce.ProductServiceServer
+func (s *server) GetProduct(ctx context.Context, in *pb.GetProductRequest) (*pb.ProductResponse, error) {
+	log.Printf("Received: GetProduct request for ID: %s", in.GetId())
+	// Mock data for demonstration
+	product := &pb.ProductResponse{
+		Id:          in.GetId(),
+		Name:        "Product " + in.GetId(),
+		Description: "A mock product description.",
+		Price:       19.99,
+		Stock: 			 12,
+	}
+	return &pb.ProductResponse{
+		Id: product.Id,
+		Name: product.Name,
+		Price: product.Price,
+		Stock: product.Stock,
+		Description: product.Description,
+	}, nil
 }
 
-func (s *Service) GetProduct(ctx context.Context, req *pb.GetProductRequest) (*pb.ProductResponse, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-
-    if product, exists := s.products[req.Id]; exists {
-        return product, nil
-    }
-    return nil, fmt.Errorf("product not found")
-}
-
-func (s *Service) CreateProduct(ctx context.Context, req *pb.CreateProductRequest) (*pb.ProductResponse, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-
-    id := fmt.Sprintf("prod_%d", len(s.products)+1)
-    product := &pb.ProductResponse{
-        Id:          id,
-        Name:        req.Name,
-        Description: req.Description,
-        Price:       req.Price,
-        Stock:       req.Stock,
-    }
-    s.products[id] = product
-    return product, nil
-}
-
-func (s *Service) GetProducts(ctx context.Context, req *pb.GetProductsRequest) (*pb.GetProductsResponse, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-
-    var products []*pb.ProductResponse
-    for _, id := range req.Ids {
-        if product, exists := s.products[id]; exists {
-            products = append(products, product)
-        }
-    }
-    return &pb.GetProductsResponse{Products: products}, nil
-}
-
-func (s *Service) ListProducts(ctx context.Context, req *pb.ListProductsRequest) (*pb.ListProductsResponse, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-
-    var products []*pb.ProductResponse
-    for _, product := range s.products {
-        products = append(products, product)
-    }
-    return &pb.ListProductsResponse{
-        Products: products,
-        Total:    int32(len(products)),
-    }, nil
+func main() {
+	lis, err := net.Listen("tcp", port)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	s := grpc.NewServer()
+	pb.RegisterProductServiceServer(s, &server{})
+	log.Printf("Product Service listening at %v", lis.Addr())
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
 }
